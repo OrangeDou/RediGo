@@ -66,6 +66,7 @@ func ListenAndServe(listener net.Listener, handler Handler, closeChan <-chan str
 }
 
 // 通过监听中断信号，通过closeChan通知服务器关闭
+// TODO 优雅的读取配置文件
 func ListenAndServeWithSignal(cfg *Config, handler Handler) error {
 	closeCh := make(chan struct{})
 	sigCh := make(chan os.Signal)
