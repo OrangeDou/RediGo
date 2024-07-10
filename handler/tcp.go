@@ -13,10 +13,14 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"redigo/utils"
 	"sync"
 	"syscall"
+)
 
-	"gorm.io/gorm/logger"
+var (
+	logger utils.Logger
+	viper  viper
 )
 
 type Handler interface {
