@@ -16,11 +16,12 @@ import (
 	"redigo/utils"
 	"sync"
 	"syscall"
+
+	"github.com/spf13/viper"
 )
 
 var (
 	logger utils.Logger
-	viper  viper
 )
 
 type Handler interface {
@@ -67,7 +68,8 @@ func ListenAndServe(listener net.Listener, handler Handler, closeChan <-chan str
 
 // 通过监听中断信号，通过closeChan通知服务器关闭
 // TODO 优雅的读取配置文件
-func ListenAndServeWithSignal(cfg *Config, handler Handler) error {
+func ListenAndServeWithSignal(handler Handler) error {
+	address := viper.GetString("address")
 	closeCh := make(chan struct{})
 	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
@@ -79,11 +81,12 @@ func ListenAndServeWithSignal(cfg *Config, handler Handler) error {
 		}
 	}()
 	//绑定监听地址
-	listener, err := net.Listen("tcp", cfg.address)
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatal(fmt.Sprintf("listen err: %v", err))
 	}
 	defer listener.Close()
-	log.Println(fmt.Sprintf("bind: %s, start listening...", cfg.address))
+	log.Println(fmt.Sprintf("bind: %s, start listening...", address))
+	return nil
 
 }
