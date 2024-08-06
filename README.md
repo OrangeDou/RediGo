@@ -20,6 +20,6 @@ KV 内存数据库的核心是并发安全的哈希表
 
 数据结构示意图：
 
-![1722951412323](image/README/1722951412323.png)
+![1722951412323](image/README/zset.png)
 
 实现在：datastruct/zset/sortedset.go 中
