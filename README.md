@@ -13,3 +13,13 @@ Using golang to achieve Redis
 ## 三、实现 KV 内存数据库
 
 KV 内存数据库的核心是并发安全的哈希表
+
+## 四、基础数据结构
+
+### 1.Zset 跳表
+
+数据结构示意图：
+
+![1722951412323](image/README/1722951412323.png)
+
+实现在：datastruct/zset/sortedset.go 中
