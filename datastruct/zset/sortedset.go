@@ -1,238 +1,66 @@
 package zset
 
-import (
-	"strconv"
-)
-
-// SortedSet is a set which keys sorted by bound score
-type SortedSet struct {
-	dict     map[string]*Element
-	skiplist *skiplist
+// 对外的元素抽象
+type Element struct {
+	Member string
+	Score  float64
 }
 
-// Make makes a new SortedSet
-func Make() *SortedSet {
-	return &SortedSet{
-		dict:     make(map[string]*Element),
-		skiplist: makeSkiplist(),
-	}
+type Node struct {
+	Element
+	backward *Node //后向指针
+	level    []*Level
 }
 
-// Add puts member into set,  and returns whether it has inserted new node
-func (sortedSet *SortedSet) Add(member string, score float64) bool {
-	element, ok := sortedSet.dict[member]
-	sortedSet.dict[member] = &Element{
-		Member: member,
-		Score:  score,
-	}
-	if ok {
-		if score != element.Score {
-			sortedSet.skiplist.remove(member, element.Score)
-			sortedSet.skiplist.insert(member, score)
+// 节点中每一层的抽象
+type Level struct {
+	forward *Node
+	span    int64 // 到 forward 跳过的节点数 (跨度)
+}
+type skiplist struct {
+	header *Node
+	tail   *Node
+	length int64
+	level  int16 // 	高度
+}
+
+// 寻找排名为 rank 的节点, rank 从1开始
+func (skiplist *skiplist) getByRank(rank int64) *Node {
+	var i int64 = 0 //累计跨度
+	n := skiplist.header
+	// 自顶向下查询
+	for curLevel := skiplist.level - 1; curLevel >= 0; curLevel-- {
+		// 从当前层向前搜索，若当前层下一个节点已经超过目标(i+n.level[level].span > rank)，则结束当前搜索进入下一层
+		for n.level[curLevel].forward != nil && (i+n.level[curLevel].span) <= rank {
+			i += n.level[curLevel].span
+			n = n.level[curLevel].forward //移动到当前层下一个节点
 		}
-		return false
-	}
-	sortedSet.skiplist.insert(member, score)
-	return true
-}
-
-// Len returns number of members in set
-func (sortedSet *SortedSet) Len() int64 {
-	return int64(len(sortedSet.dict))
-}
-
-// Get returns the given member
-func (sortedSet *SortedSet) Get(member string) (element *Element, ok bool) {
-	element, ok = sortedSet.dict[member]
-	if !ok {
-		return nil, false
-	}
-	return element, true
-}
-
-// Remove removes the given member from set
-func (sortedSet *SortedSet) Remove(member string) bool {
-	v, ok := sortedSet.dict[member]
-	if ok {
-		sortedSet.skiplist.remove(member, v.Score)
-		delete(sortedSet.dict, member)
-		return true
-	}
-	return false
-}
-
-// GetRank returns the rank of the given member, sort by ascending order, rank starts from 0
-func (sortedSet *SortedSet) GetRank(member string, desc bool) (rank int64) {
-	element, ok := sortedSet.dict[member]
-	if !ok {
-		return -1
-	}
-	r := sortedSet.skiplist.getRank(member, element.Score)
-	if desc {
-		r = sortedSet.skiplist.length - r
-	} else {
-		r--
-	}
-	return r
-}
-
-// ForEachByRank visits each member which rank within [start, stop), sort by ascending order, rank starts from 0
-func (sortedSet *SortedSet) ForEachByRank(start int64, stop int64, desc bool, consumer func(element *Element) bool) {
-	size := sortedSet.Len()
-	if start < 0 || start >= size {
-		panic("illegal start " + strconv.FormatInt(start, 10))
-	}
-	if stop < start || stop > size {
-		panic("illegal end " + strconv.FormatInt(stop, 10))
-	}
-
-	// find start node
-	var node *node
-	if desc {
-		node = sortedSet.skiplist.tail
-		if start > 0 {
-			node = sortedSet.skiplist.getByRank(size - start)
-		}
-	} else {
-		node = sortedSet.skiplist.header.level[0].forward
-		if start > 0 {
-			node = sortedSet.skiplist.getByRank(start + 1)
+		if i == rank {
+			return n
 		}
 	}
-
-	sliceSize := int(stop - start)
-	for i := 0; i < sliceSize; i++ {
-		if !consumer(&node.Element) {
-			break
-		}
-		if desc {
-			node = node.backward
-		} else {
-			node = node.level[0].forward
-		}
-	}
+	return nil
 }
 
-// RangeByRank returns members which rank within [start, stop), sort by ascending order, rank starts from 0
-func (sortedSet *SortedSet) RangeByRank(start int64, stop int64, desc bool) []*Element {
-	sliceSize := int(stop - start)
-	slice := make([]*Element, sliceSize)
-	i := 0
-	sortedSet.ForEachByRank(start, stop, desc, func(element *Element) bool {
-		slice[i] = element
-		i++
-		return true
-	})
-	return slice
-}
-
-// RangeCount returns the number of  members which score or member within the given border
-func (sortedSet *SortedSet) RangeCount(min Border, max Border) int64 {
-	var i int64 = 0
-	// ascending order
-	sortedSet.ForEachByRank(0, sortedSet.Len(), false, func(element *Element) bool {
-		gtMin := min.less(element) // greater than min
-		if !gtMin {
-			// has not into range, continue foreach
-			return true
-		}
-		ltMax := max.greater(element) // less than max
-		if !ltMax {
-			// break through score border, break foreach
-			return false
-		}
-		// gtMin && ltMax
-		i++
-		return true
-	})
-	return i
-}
-
-// ForEach visits members which score or member within the given border
-func (sortedSet *SortedSet) ForEach(min Border, max Border, offset int64, limit int64, desc bool, consumer func(element *Element) bool) {
-	// find start node
-	var node *node
-	if desc {
-		node = sortedSet.skiplist.getLastInRange(min, max)
-	} else {
-		node = sortedSet.skiplist.getFirstInRange(min, max)
-	}
-
-	for node != nil && offset > 0 {
-		if desc {
-			node = node.backward
-		} else {
-			node = node.level[0].forward
-		}
-		offset--
-	}
-
-	// A negative limit returns all elements from the offset
-	for i := 0; (i < int(limit) || limit < 0) && node != nil; i++ {
-		if !consumer(&node.Element) {
-			break
-		}
-		if desc {
-			node = node.backward
-		} else {
-			node = node.level[0].forward
-		}
-		if node == nil {
-			break
-		}
-		gtMin := min.less(&node.Element) // greater than min
-		ltMax := max.greater(&node.Element)
-		if !gtMin || !ltMax {
-			break // break through score border
-		}
-	}
-}
-
-// Range returns members which score or member within the given border
-// param limit: <0 means no limit
-func (sortedSet *SortedSet) Range(min Border, max Border, offset int64, limit int64, desc bool) []*Element {
-	if limit == 0 || offset < 0 {
-		return make([]*Element, 0)
-	}
-	slice := make([]*Element, 0)
-	sortedSet.ForEach(min, max, offset, limit, desc, func(element *Element) bool {
-		slice = append(slice, element)
-		return true
-	})
-	return slice
-}
-
-// RemoveRange removes members which score or member within the given border
-func (sortedSet *SortedSet) RemoveRange(min Border, max Border) int64 {
-	removed := sortedSet.skiplist.RemoveRange(min, max, 0)
-	for _, element := range removed {
-		delete(sortedSet.dict, element.Member)
-	}
-	return int64(len(removed))
-}
-
-func (sortedSet *SortedSet) PopMin(count int) []*Element {
-	first := sortedSet.skiplist.getFirstInRange(scoreNegativeInfBorder, scorePositiveInfBorder)
-	if first == nil {
+// ZRangeByScore 命令需要 getFirstInScoreRange 函数找到分数范围内第一个节点:
+func (skiplist *skiplist) getFirstInScoreRange(min *ScoreBorder, max *ScoreBorder) *Node {
+	// 判断跳表和范围是否有交集，若无交集提早返回
+	if !skiplist.hasInRange(min, max) {
 		return nil
 	}
-	border := &ScoreBorder{
-		Value:   first.Score,
-		Exclude: false,
+	n := skiplist.header
+	// 从顶层向下查询
+	for level := skiplist.level - 1; level >= 0; level-- {
+		// 若 forward 节点仍未进入范围则继续向前(forward)
+		// 若 forward 节点已进入范围，当 level > 0 时 forward 节点不能保证是 *第一个* 在 min 范围内的节点， 因此需进入下一层查找
+		for n.level[level].forward != nil && !min.less(n.level[level].forward.Score) {
+			n = n.level[level].forward
+		}
 	}
-	removed := sortedSet.skiplist.RemoveRange(border, scorePositiveInfBorder, count)
-	for _, element := range removed {
-		delete(sortedSet.dict, element.Member)
+	// 当从外层循环退出时 level=0 (最下层), n.level[0].forward 一定是 min 范围内的第一个节点
+	n = n.level[0].forward
+	if !max.greater(n.Score) {
+		return nil
 	}
-	return removed
-}
-
-// RemoveByRank removes member ranking within [start, stop)
-// sort by ascending order and rank starts from 0
-func (sortedSet *SortedSet) RemoveByRank(start int64, stop int64) int64 {
-	removed := sortedSet.skiplist.RemoveRangeByRank(start+1, stop+1)
-	for _, element := range removed {
-		delete(sortedSet.dict, element.Member)
-	}
-	return int64(len(removed))
+	return n
 }
