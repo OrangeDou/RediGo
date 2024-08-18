@@ -13,7 +13,8 @@ import (
 
 	database "redigo/interface/datebase"
 
-	"github.com/hdt3213/godis/redis/connection"
+	"redigo/redis/connection"
+
 	"github.com/hdt3213/godis/redis/parser"
 )
 
