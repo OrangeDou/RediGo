@@ -14,7 +14,7 @@ import (
 
 	log "redigo/lib/logger"
 
-	"github.com/hdt3213/godis/redis/parser"
+	"redigo/redis/parser"
 )
 
 const (
