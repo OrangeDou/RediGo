@@ -1,4 +1,4 @@
-package protocol
+package parser
 
 import (
 	"bufio"
@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/redis/protocol"
+	"redigo/interface/redis"
+	"redigo/redis/protocol"
 )
 
 var logger utils.Logger

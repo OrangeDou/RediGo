@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hdt3213/godis/interface/tcp"
-	"github.com/hdt3213/godis/lib/logger"
+	"redigo/interface/tcp"
+	"redigo/lib/logger"
 )
 
 // Config stores tcp server properties

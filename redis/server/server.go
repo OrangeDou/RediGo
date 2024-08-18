@@ -15,7 +15,7 @@ import (
 
 	"redigo/redis/connection"
 
-	"github.com/hdt3213/godis/redis/parser"
+	"redigo/redis/parser"
 )
 
 /*
