@@ -70,6 +70,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 
 	ctx := context.Background()
 	var waitDone sync.WaitGroup
+	// io多路复用
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

@@ -23,7 +23,9 @@ type Shard struct {
 	mutex sync.RWMutex
 }
 
+// 初始化分片，计算一个基于输入参数 param 的、通过位操作得到的、尽可能接近但不小于 param 的 2 的幂，并返回这个值
 func computeCapacity(param int) (size int) {
+	// 最小分片数16
 	if param <= 16 {
 		return 16
 	}
@@ -67,6 +69,7 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
+// 定位shard
 func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 	if dict == nil {
 		panic("dict is nil")
@@ -379,6 +382,7 @@ func (dict *ConcurrentDict) Clear() {
 	*dict = *MakeConcurrent(dict.shardCount)
 }
 
+// 所有协程按照相同的顺序加锁，避免循环等待
 func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 {
 	indexMap := make(map[uint32]struct{})
 	for _, key := range keys {

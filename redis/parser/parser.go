@@ -7,15 +7,12 @@ import (
 	"fmt"
 	"io"
 
-	"redigo/utils"
+	"redigo/interface/redis"
+	"redigo/lib/logger"
+	"redigo/redis/protocol"
 	"strconv"
 	"strings"
-
-	"redigo/interface/redis"
-	"redigo/redis/protocol"
 )
-
-var logger utils.Logger
 
 // 存储redis的响应或者error
 type Payload struct {

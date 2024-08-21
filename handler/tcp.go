@@ -13,15 +13,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"redigo/utils"
+	"redigo/lib/logger"
 	"sync"
 	"syscall"
 
 	"github.com/spf13/viper"
-)
-
-var (
-	logger utils.Logger
 )
 
 type Handler interface {
