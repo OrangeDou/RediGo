@@ -1,7 +1,6 @@
 # RediGo@V1.0.0
-
 Using golang to achieve Redis
-
+![structure](image.png)
 ## 一、实现 TCP 服务器
 
 ## 二、Redis 通信协议以及协议解析器
