@@ -1,5 +1,9 @@
 package dict
 
+import (
+	"redigo/lib/wildcard"
+)
+
 // SimpleDict wraps a map, it is not thread safe
 type SimpleDict struct {
 	m map[string]interface{}
@@ -119,4 +123,23 @@ func (dict *SimpleDict) RandomDistinctKeys(limit int) []string {
 // Clear removes all keys in dict
 func (dict *SimpleDict) Clear() {
 	*dict = *MakeSimple()
+}
+
+func (dict *SimpleDict) DictScan(cursor int, count int, pattern string) ([][]byte, int) {
+	result := make([][]byte, 0)
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return result, -1
+	}
+	for k := range dict.m {
+		if pattern == "*" || matchKey.IsMatch(k) {
+			raw, exists := dict.Get(k)
+			if !exists {
+				continue
+			}
+			result = append(result, []byte(k))
+			result = append(result, raw.([]byte))
+		}
+	}
+	return result, 0
 }
