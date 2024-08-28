@@ -2,30 +2,27 @@ package dict
 
 import (
 	"math"
+	"math/rand"
+	"redigo/lib/wildcard"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/exp/rand"
 )
 
-// 数据库字典
+// ConcurrentDict is thread safe map using sharding lock
 type ConcurrentDict struct {
-	table      []*Shard
+	table      []*shard
 	count      int32
 	shardCount int
 }
 
-// 数据库分片
-type Shard struct {
+type shard struct {
 	m     map[string]interface{}
 	mutex sync.RWMutex
 }
 
-// 初始化分片，计算一个基于输入参数 param 的、通过位操作得到的、尽可能接近但不小于 param 的 2 的幂，并返回这个值
 func computeCapacity(param int) (size int) {
-	// 最小分片数16
 	if param <= 16 {
 		return 16
 	}
@@ -44,9 +41,9 @@ func computeCapacity(param int) (size int) {
 // MakeConcurrent creates ConcurrentDict with the given shard count
 func MakeConcurrent(shardCount int) *ConcurrentDict {
 	shardCount = computeCapacity(shardCount)
-	table := make([]*Shard, shardCount)
+	table := make([]*shard, shardCount)
 	for i := 0; i < shardCount; i++ {
-		table[i] = &Shard{
+		table[i] = &shard{
 			m: make(map[string]interface{}),
 		}
 	}
@@ -69,7 +66,6 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
-// 定位shard
 func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 	if dict == nil {
 		panic("dict is nil")
@@ -78,7 +74,7 @@ func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 	return (tableSize - 1) & hashCode
 }
 
-func (dict *ConcurrentDict) getShard(index uint32) *Shard {
+func (dict *ConcurrentDict) getShard(index uint32) *shard {
 	if dict == nil {
 		panic("dict is nil")
 	}
@@ -308,7 +304,7 @@ func (dict *ConcurrentDict) Keys() []string {
 }
 
 // RandomKey returns a key randomly
-func (shard *Shard) RandomKey() string {
+func (shard *shard) RandomKey() string {
 	if shard == nil {
 		panic("shard is nil")
 	}
@@ -330,7 +326,7 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	shardCount := len(dict.table)
 
 	result := make([]string, limit)
-	nR := rand.New(rand.NewSource(uint64(time.Now().UnixNano())))
+	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < limit; {
 		s := dict.getShard(uint32(nR.Intn(shardCount)))
 		if s == nil {
@@ -354,7 +350,7 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 
 	shardCount := len(dict.table)
 	result := make(map[string]struct{})
-	nR := rand.New(rand.NewSource(uint64(time.Now().UnixNano())))
+	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for len(result) < limit {
 		shardIndex := uint32(nR.Intn(shardCount))
 		s := dict.getShard(shardIndex)
@@ -382,7 +378,6 @@ func (dict *ConcurrentDict) Clear() {
 	*dict = *MakeConcurrent(dict.shardCount)
 }
 
-// 所有协程按照相同的顺序加锁，避免循环等待
 func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 {
 	indexMap := make(map[uint32]struct{})
 	for _, key := range keys {
@@ -440,4 +435,48 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 			mu.RUnlock()
 		}
 	}
+}
+
+func stringsToBytes(strSlice []string) [][]byte {
+	byteSlice := make([][]byte, len(strSlice))
+	for i, str := range strSlice {
+		byteSlice[i] = []byte(str)
+	}
+	return byteSlice
+}
+
+func (dict *ConcurrentDict) DictScan(cursor int, count int, pattern string) ([][]byte, int) {
+	size := dict.Len()
+	result := make([][]byte, 0)
+
+	if pattern == "*" && count >= size {
+		return stringsToBytes(dict.Keys()), 0
+	}
+
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return result, -1
+	}
+
+	shardCount := len(dict.table)
+	shardIndex := cursor
+
+	for shardIndex < shardCount {
+		shard := dict.table[shardIndex]
+		shard.mutex.RLock()
+		if len(result)+len(shard.m) > count && shardIndex > cursor {
+			shard.mutex.RUnlock()
+			return result, shardIndex
+		}
+
+		for key := range shard.m {
+			if pattern == "*" || matchKey.IsMatch(key) {
+				result = append(result, []byte(key))
+			}
+		}
+		shard.mutex.RUnlock()
+		shardIndex++
+	}
+
+	return result, 0
 }
