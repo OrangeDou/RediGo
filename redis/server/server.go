@@ -11,7 +11,7 @@ import (
 	"redigo/lib/sync/atomic"
 	"redigo/redis/protocol"
 
-	database "redigo/interface/datebase"
+	database "redigo/interface/database"
 
 	"redigo/redis/connection"
 
