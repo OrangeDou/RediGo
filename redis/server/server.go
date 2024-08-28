@@ -11,7 +11,7 @@ import (
 	"redigo/lib/sync/atomic"
 	"redigo/redis/protocol"
 
-	database "redigo/interface/database"
+	"redigo/interface/database"
 
 	"redigo/redis/connection"
 
@@ -45,7 +45,7 @@ func (h *Handler) closeClient(client *connection.Connection) {
 	h.activeConn.Delete(client)
 }
 
-func (h *Handler) Handler(ctx context.Context, conn net.Conn) {
+func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	if h.closing.Get() {
 		_ = conn.Close()
 		return
